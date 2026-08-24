@@ -6,6 +6,8 @@
 //
 
 import Foundation
+import UIKit
+
 class NavigatorPopGestureRecognizerDelegate: NSObject, UIGestureRecognizerDelegate {
     weak var navigationController: UINavigationController?
 

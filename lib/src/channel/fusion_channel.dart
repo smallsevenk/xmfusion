@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -25,6 +27,8 @@ class FusionChannel {
 
   final _hostPush = const BasicMessageChannel(
       '$_fusionChannel/host/push', StandardMessageCodec());
+  final _hostRequest = const BasicMessageChannel(
+      '$_fusionChannel/host/request', StandardMessageCodec());
   final _hostDestroy = const BasicMessageChannel(
       '$_fusionChannel/host/destroy', StandardMessageCodec());
   final _hostRestore = const BasicMessageChannel(
@@ -256,6 +260,30 @@ class FusionChannel {
         'history': history,
       });
     }
+  }
+
+  void dispatchNative(String name, Map<String, dynamic>? args) {
+    unawaited(
+      _hostPush.send({
+        'name': name,
+        'args': args,
+        'type': FusionRouteType.native.index,
+      }).catchError((Object _) => null),
+    );
+  }
+
+  Future<T?> requestNative<T extends Object?>(
+    String name,
+    Map<String, dynamic>? args,
+    String requestId,
+  ) async {
+    final result = await _hostRequest.send({
+      'name': name,
+      'args': args,
+      'type': FusionRouteType.native.index,
+      'requestId': requestId,
+    });
+    return result as T?;
   }
 
   Future push(String name, dynamic args, FusionRouteType type) async {

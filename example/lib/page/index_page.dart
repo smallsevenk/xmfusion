@@ -218,15 +218,11 @@ class _IndexPageState extends State<IndexPage> with FusionPageLifecycleMixin {
               onTap: () async {
                 final result = await FusionNavigator.push(
                   '/transparent',
-                  routeArgs: {
-                    'title': 'Transparent Flutter Page',
-                    'transparent': true
-                  },
+                  routeArgs: {'title': 'Transparent Flutter Page', 'transparent': true},
                   routeType: FusionRouteType.flutterWithContainer,
                 );
                 if (kDebugMode) {
-                  print(
-                      'push(flutterWithContainer) /transparent result=$result');
+                  print('push(flutterWithContainer) /transparent result=$result');
                 }
               }),
           const SizedBox(
@@ -322,11 +318,10 @@ class _IndexPageState extends State<IndexPage> with FusionPageLifecycleMixin {
               child: const Text('platform plugin'),
               onTap: () async {
                 if (Platform.isAndroid) {
-                  SystemChannels.platform.invokeMethod('HapticFeedback.vibrate',
-                      'HapticFeedbackType.mediumImpact');
+                  SystemChannels.platform
+                      .invokeMethod('HapticFeedback.vibrate', 'HapticFeedbackType.mediumImpact');
                 } else {
-                  SystemChannels.platform.invokeMethod(
-                      'SystemSound.play', 'SystemSoundType.click');
+                  SystemChannels.platform.invokeMethod('SystemSound.play', 'SystemSoundType.click');
                 }
               }),
           const SizedBox(
@@ -335,8 +330,7 @@ class _IndexPageState extends State<IndexPage> with FusionPageLifecycleMixin {
           InkWell(
               child: const Text('fusion plugin'),
               onTap: () async {
-                final result =
-                    await widget._channel.invokeMethod('getPlatformVersion');
+                final result = await widget._channel.invokeMethod('getPlatformVersion');
                 if (kDebugMode) {
                   print('fusion plugin result=$result');
                 }
@@ -347,9 +341,8 @@ class _IndexPageState extends State<IndexPage> with FusionPageLifecycleMixin {
           InkWell(
               child: const Text('container_related_channel'),
               onTap: () async {
-                final result =
-                    await const MethodChannel('container_related_channel')
-                        .invokeMethod('container_related_channel');
+                final result = await const MethodChannel('container_related_channel')
+                    .invokeMethod('container_related_channel');
                 if (kDebugMode) {
                   print('container_related_channel result=$result');
                 }
@@ -414,8 +407,7 @@ class _IndexPageState extends State<IndexPage> with FusionPageLifecycleMixin {
               child: const Text('push(flutter) show dialog'),
               onTap: () {
                 FusionNavigator.push('/dialog_page',
-                    routeArgs: {'transparent': true},
-                    routeType: FusionRouteType.flutter);
+                    routeArgs: {'transparent': true}, routeType: FusionRouteType.flutter);
               }),
           const SizedBox(
             height: 20,

@@ -8,8 +8,30 @@
 import Flutter
 import Foundation
 
+private final class FusionOneShotReply {
+    private let lock = NSLock()
+    private var completed = false
+    private let reply: FlutterReply
+
+    init(_ reply: @escaping FlutterReply) {
+        self.reply = reply
+    }
+
+    func complete(_ value: Any?) {
+        lock.lock()
+        guard !completed else {
+            lock.unlock()
+            return
+        }
+        completed = true
+        lock.unlock()
+        reply(value)
+    }
+}
+
 internal class FusionEngineBinding: NSObject {
     private var hostPush: FlutterBasicMessageChannel? = nil
+    private var hostRequest: FlutterBasicMessageChannel? = nil
     private var hostDestroy: FlutterBasicMessageChannel? = nil
     private var hostRestore: FlutterBasicMessageChannel? = nil
     private var hostSync: FlutterBasicMessageChannel? = nil
@@ -51,6 +73,7 @@ internal class FusionEngineBinding: NSObject {
         }
         let binaryMessenger = engine.binaryMessenger
         hostPush = FlutterBasicMessageChannel(name: "\(FusionConstant.FUSION_CHANNEL)/host/push", binaryMessenger: binaryMessenger)
+        hostRequest = FlutterBasicMessageChannel(name: "\(FusionConstant.FUSION_CHANNEL)/host/request", binaryMessenger: binaryMessenger)
         hostDestroy = FlutterBasicMessageChannel(name: "\(FusionConstant.FUSION_CHANNEL)/host/destroy", binaryMessenger: binaryMessenger)
         hostRestore = FlutterBasicMessageChannel(name: "\(FusionConstant.FUSION_CHANNEL)/host/restore", binaryMessenger: binaryMessenger)
         hostSync = FlutterBasicMessageChannel(name: "\(FusionConstant.FUSION_CHANNEL)/host/sync", binaryMessenger: binaryMessenger)
@@ -86,6 +109,26 @@ internal class FusionEngineBinding: NSObject {
                 Fusion.instance.delegate?.pushNativeRoute(name: name, args: args)
             }
             reply(nil)
+        }
+        hostRequest?.setMessageHandler { (message: Any?, reply: @escaping FlutterReply) in
+            guard
+                let dict = message as? Dictionary<String, Any>,
+                let name = dict["name"] as? String,
+                let requestId = dict["requestId"] as? String,
+                !requestId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                let delegate = Fusion.instance.delegate as? FusionResultRouteDelegate
+            else {
+                reply(nil)
+                return
+            }
+            let oneShot = FusionOneShotReply(reply)
+            let args = dict["args"] as? Dictionary<String, Any>
+            delegate.pushNativeRouteForResult(
+                name: name,
+                args: args,
+                requestId: requestId,
+                completion: oneShot.complete
+            )
         }
         hostDestroy?.setMessageHandler { (message: Any?, reply: @escaping FlutterReply) in
             guard let dict = message as? Dictionary<String, Any>, let uniqueId = dict["uniqueId"] as? String else {
@@ -279,6 +322,8 @@ internal class FusionEngineBinding: NSObject {
     func detach() {
         hostPush?.setMessageHandler(nil)
         hostPush = nil
+        hostRequest?.setMessageHandler(nil)
+        hostRequest = nil
         hostDestroy?.setMessageHandler(nil)
         hostDestroy = nil
         hostRestore?.setMessageHandler(nil)

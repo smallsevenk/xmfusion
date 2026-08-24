@@ -8,11 +8,87 @@
 import Flutter
 import Foundation
 
-open class FusionViewController: FlutterViewController {
+private final class FusionNavigationDelegateProxy: NSObject, UINavigationControllerDelegate {
+    weak var owner: FusionViewController?
+    weak var navigationController: UINavigationController?
+    private var previousDelegate: UINavigationControllerDelegate?
+
+    init(
+        owner: FusionViewController,
+        navigationController: UINavigationController,
+        previousDelegate: UINavigationControllerDelegate?
+    ) {
+        self.owner = owner
+        self.navigationController = navigationController
+        self.previousDelegate = previousDelegate
+        super.init()
+    }
+
+    func navigationController(
+        _ navigationController: UINavigationController,
+        willShow viewController: UIViewController,
+        animated: Bool
+    ) {
+        previousDelegate?.navigationController?(
+            navigationController,
+            willShow: viewController,
+            animated: animated
+        )
+    }
+
+    func navigationController(
+        _ navigationController: UINavigationController,
+        didShow viewController: UIViewController,
+        animated: Bool
+    ) {
+        previousDelegate?.navigationController?(
+            navigationController,
+            didShow: viewController,
+            animated: animated
+        )
+        owner?.fusionNavigationController(
+            navigationController,
+            didShow: viewController
+        )
+    }
+
+    override func responds(to selector: Selector!) -> Bool {
+        super.responds(to: selector) || previousDelegate?.responds(to: selector) == true
+    }
+
+    override func forwardingTarget(for selector: Selector!) -> Any? {
+        if previousDelegate?.responds(to: selector) == true {
+            return previousDelegate
+        }
+        return super.forwardingTarget(for: selector)
+    }
+
+    func restorePreviousDelegate() {
+        guard let navigationController else { return }
+        if navigationController.delegate === self {
+            navigationController.delegate = previousDelegate
+        }
+        previousDelegate = nil
+    }
+}
+
+open class FusionViewController: FlutterViewController, FusionPopGestureHandler {
     internal var history: [Dictionary<String, Any?>] = []
     internal var uniqueId = "container_\(UUID().uuidString)"
     private let engineBinding = Fusion.instance.engineBinding
     private var backgroundColor: UIColor = .white
+    private var didHandleAttachFailure = false
+    private var didRequestNativeClose = false
+    private var didReportClose = false
+    private var activeInteractiveTransition: UUID?
+    private var navigationDelegateProxy: FusionNavigationDelegateProxy?
+    private var previousPopGestureEnabled: Bool?
+
+    /// Current Flutter depth as last synchronized by the Fusion Dart runtime.
+    public var flutterPageDepth: Int { history.count }
+
+    /// Whether this controller currently owns Fusion's managed engine view.
+    public var isFusionEngineAttached: Bool { isAttached }
     
     private var isAttached: Bool {
         get {
@@ -20,23 +96,29 @@ open class FusionViewController: FlutterViewController {
         }
     }
     
-    private func attachToContainer() {
+    @discardableResult
+    private func attachToContainer() -> Bool {
+        guard let engine = engineBinding?.engine else {
+            handleAttachFailure(reason: "managedEngineUnavailable")
+            return false
+        }
         if !isAttached {
-            // Attach
-            engineBinding?.engine?.viewController = self
+            engine.viewController = self
         }
-        // Configure custom channel
-        if let engine = engineBinding?.engine {
-            (self as? FusionMessengerHandler)?.configureFlutterChannel(binaryMessenger: engine.binaryMessenger)
+        guard engine.viewController === self else {
+            handleAttachFailure(reason: "managedEngineRejectedController")
+            return false
         }
+        (self as? FusionMessengerHandler)?.configureFlutterChannel(
+            binaryMessenger: engine.binaryMessenger
+        )
+        return true
     }
 
     private func detachFromContainer() {
         if isAttached {
-            // Detach
             engineBinding?.engine?.viewController = nil
         }
-        // Release custom channel
         (self as? FusionMessengerHandler)?.releaseFlutterChannel()
     }
     
@@ -51,15 +133,18 @@ open class FusionViewController: FlutterViewController {
     }
 
     private func onContainerVisible() {
+        guard !didRequestNativeClose else { return }
+        installNavigationObservationIfNeeded()
         FusionStackManager.instance.add(self)
-        engineBinding?.switchTop(uniqueId) {
+        engineBinding?.switchTop(uniqueId) { [weak self] in
+            guard let self, !self.didRequestNativeClose else { return }
             self.attachToContainer()
             self.updateSystemOverlayStyle()
         }
         engineBinding?.notifyPageVisible(uniqueId)
-        self.attachToContainer()
+        attachToContainer()
     }
-    
+
     private func updateSystemOverlayStyle() {
         engineBinding?.checkStyle { statusBarStyle in
             NotificationCenter.default.post(
@@ -76,8 +161,121 @@ open class FusionViewController: FlutterViewController {
     }
 
     private func onContainerDestroy() {
+        reportCloseIfNeeded()
+        restoreNavigationState()
         FusionStackManager.instance.remove(self)
         engineBinding?.destroy(uniqueId)
+    }
+
+    private func handleAttachFailure(reason: String) {
+        guard !didHandleAttachFailure else { return }
+        didHandleAttachFailure = true
+        (Fusion.instance.delegate as? FusionViewControllerLifecycleDelegate)?
+            .fusionViewController(self, didFailToAttach: reason)
+        DispatchQueue.main.async { [weak self] in
+            self?.closeNativeContainerOnce()
+        }
+    }
+
+    private func installNavigationObservationIfNeeded() {
+        guard navigationDelegateProxy == nil, let navigationController else { return }
+        previousPopGestureEnabled = navigationController.interactivePopGestureRecognizer?.isEnabled
+        let proxy = FusionNavigationDelegateProxy(
+            owner: self,
+            navigationController: navigationController,
+            previousDelegate: navigationController.delegate
+        )
+        navigationDelegateProxy = proxy
+        navigationController.delegate = proxy
+    }
+
+    private func restoreNavigationState() {
+        navigationDelegateProxy?.restorePreviousDelegate()
+        navigationDelegateProxy = nil
+        if let previousPopGestureEnabled {
+            navigationController?.interactivePopGestureRecognizer?.isEnabled = previousPopGestureEnabled
+        }
+        previousPopGestureEnabled = nil
+    }
+
+    private func reportCloseIfNeeded() {
+        guard !didReportClose else { return }
+        didReportClose = true
+        (Fusion.instance.delegate as? FusionViewControllerLifecycleDelegate)?
+            .fusionViewControllerWillClose(self)
+    }
+
+    private func closeNativeContainerOnce() {
+        guard !didRequestNativeClose else { return }
+        didRequestNativeClose = true
+        reportCloseIfNeeded()
+
+        if let navigationController,
+           navigationController.viewControllers.contains(where: { $0 === self }) {
+            if navigationController.topViewController === self,
+               navigationController.viewControllers.count > 1 {
+                navigationController.popViewController(animated: true)
+            } else if navigationController.viewControllers.count > 1 {
+                navigationController.setViewControllers(
+                    navigationController.viewControllers.filter { $0 !== self },
+                    animated: false
+                )
+            } else if navigationController.presentingViewController != nil {
+                navigationController.dismiss(animated: isViewOpaque)
+            }
+        } else if presentingViewController != nil {
+            dismiss(animated: isViewOpaque)
+        }
+    }
+
+    /// Native back entry used by host buttons and engine-unavailable fallback.
+    /// Flutter pages are removed before the UIKit container is closed.
+    @objc open func requestFusionBack() {
+        guard !didRequestNativeClose else { return }
+        guard isAttached, engineBinding?.engine != nil else {
+            closeNativeContainerOnce()
+            return
+        }
+        if history.count > 1 {
+            FusionNavigator.maybePop(nil as Any?)
+        } else {
+            closeNativeContainerOnce()
+        }
+    }
+
+    public func enablePopGesture() {
+        installNavigationObservationIfNeeded()
+        guard let navigationController,
+              navigationController.topViewController === self,
+              navigationController.viewControllers.count > 1 else { return }
+        navigationController.interactivePopGestureRecognizer?.isEnabled = true
+    }
+
+    public func disablePopGesture() {
+        installNavigationObservationIfNeeded()
+        navigationController?.interactivePopGestureRecognizer?.isEnabled = false
+    }
+
+    fileprivate func fusionNavigationController(
+        _ navigationController: UINavigationController,
+        didShow viewController: UIViewController
+    ) {
+        guard activeInteractiveTransition != nil else { return }
+        finishInteractiveTransition(
+            cancelled: viewController === self || navigationController.viewControllers.contains(where: { $0 === self })
+        )
+    }
+
+    private func finishInteractiveTransition(cancelled: Bool) {
+        guard activeInteractiveTransition != nil else { return }
+        activeInteractiveTransition = nil
+        (Fusion.instance.delegate as? FusionViewControllerLifecycleDelegate)?
+            .fusionViewController(self, interactivePopDidFinish: cancelled)
+        if cancelled {
+            enablePopGesture()
+        } else {
+            reportCloseIfNeeded()
+        }
     }
 
     public init(routeName: String, routeArgs: Dictionary<String, Any>?, transparent: Bool = false, backgroundColor: UIColor? = nil) {
@@ -144,11 +342,30 @@ open class FusionViewController: FlutterViewController {
     open override func viewWillDisappear(_ animated: Bool) {
         UIApplication.shared.keyWindow?.endEditing(true)
         super.viewWillDisappear(animated)
+
+        if let transitionCoordinator, transitionCoordinator.isInteractive {
+            let transition = UUID()
+            activeInteractiveTransition = transition
+            transitionCoordinator.notifyWhenInteractionChanges { [weak self] context in
+                guard let self, self.activeInteractiveTransition == transition else { return }
+                self.finishInteractiveTransition(cancelled: context.isCancelled)
+            }
+        } else if isMovingFromParent
+                    || isBeingDismissed
+                    || navigationController?.isBeingDismissed == true {
+            reportCloseIfNeeded()
+        }
     }
 
     open override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         onContainerInvisible()
+        if isMovingFromParent
+            || isBeingDismissed
+            || navigationController?.viewControllers.contains(where: { $0 === self }) == false {
+            reportCloseIfNeeded()
+            restoreNavigationState()
+        }
     }
 
     deinit {

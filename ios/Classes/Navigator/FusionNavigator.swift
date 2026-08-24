@@ -7,6 +7,20 @@
 
 import Foundation
 
+@objc public protocol FusionViewControllerLifecycleDelegate: AnyObject {
+    func fusionViewController(
+        _ viewController: FusionViewController,
+        didFailToAttach reason: String
+    )
+
+    func fusionViewControllerWillClose(_ viewController: FusionViewController)
+
+    func fusionViewController(
+        _ viewController: FusionViewController,
+        interactivePopDidFinish cancelled: Bool
+    )
+}
+
 @objc public class FusionNavigator: NSObject {
     /**
      * 将对应路由入栈
@@ -55,6 +69,16 @@ import Foundation
 @objc public protocol FusionRouteDelegate {
     func pushNativeRoute(name: String, args: Dictionary<String, Any>?)
     func pushFlutterRoute(name: String, args: Dictionary<String, Any>?)
+}
+
+/// Optional result-capable extension; existing fire-and-forget delegates remain compatible.
+@objc public protocol FusionResultRouteDelegate: FusionRouteDelegate {
+    func pushNativeRouteForResult(
+        name: String,
+        args: Dictionary<String, Any>?,
+        requestId: String,
+        completion: @escaping (Any?) -> Void
+    )
 }
 
 @objc public enum FusionRouteType: Int {

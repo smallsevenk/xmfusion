@@ -5,6 +5,7 @@ import com.gtbluesky.fusion.constant.FusionConstant
 import com.gtbluesky.fusion.container.FusionStackManager
 import com.gtbluesky.fusion.event.FusionEventManager
 import com.gtbluesky.fusion.navigator.FusionNavigator
+import com.gtbluesky.fusion.navigator.FusionResultRouteDelegate
 import com.gtbluesky.fusion.navigator.FusionRouteType
 import com.gtbluesky.fusion.event.FusionEventType
 import io.flutter.embedding.engine.FlutterEngine
@@ -12,9 +13,11 @@ import io.flutter.embedding.engine.systemchannels.PlatformChannel
 import io.flutter.embedding.engine.systemchannels.PlatformViewsChannel
 import io.flutter.plugin.common.BasicMessageChannel
 import io.flutter.plugin.common.StandardMessageCodec
+import java.util.concurrent.atomic.AtomicBoolean
 
 internal class FusionEngineBinding(engine: FlutterEngine?) {
     private var hostPush: BasicMessageChannel<Any>? = null
+    private var hostRequest: BasicMessageChannel<Any>? = null
     private var hostDestroy: BasicMessageChannel<Any>? = null
     private var hostRestore: BasicMessageChannel<Any>? = null
     private var hostSync: BasicMessageChannel<Any>? = null
@@ -56,6 +59,11 @@ internal class FusionEngineBinding(engine: FlutterEngine?) {
             hostPush = BasicMessageChannel(
                 binaryMessenger,
                 "${FusionConstant.FUSION_CHANNEL}/host/push",
+                messageCodec
+            )
+            hostRequest = BasicMessageChannel(
+                binaryMessenger,
+                "${FusionConstant.FUSION_CHANNEL}/host/request",
                 messageCodec
             )
             hostDestroy = BasicMessageChannel(
@@ -176,6 +184,26 @@ internal class FusionEngineBinding(engine: FlutterEngine?) {
                 Fusion.delegate.pushNativeRoute(name, args)
             }
             reply.reply(null)
+        }
+        hostRequest?.setMessageHandler { message, reply ->
+            val resultDelegate = Fusion.delegate as? FusionResultRouteDelegate
+            val request = message as? Map<*, *>
+            val name = request?.get("name") as? String
+            val requestId = request?.get("requestId") as? String
+            if (resultDelegate == null || name == null || requestId.isNullOrBlank()) {
+                reply.reply(null)
+                return@setMessageHandler
+            }
+            val args = request["args"] as? Map<String, Any>
+            val replied = AtomicBoolean(false)
+            val completeOnce: (Any?) -> Unit = { result ->
+                if (replied.compareAndSet(false, true)) reply.reply(result)
+            }
+            try {
+                resultDelegate.pushNativeRouteForResult(name, args, requestId, completeOnce)
+            } catch (_: Throwable) {
+                completeOnce(null)
+            }
         }
         hostDestroy?.setMessageHandler { message, reply ->
             if (message !is Map<*, *>) {
@@ -417,6 +445,8 @@ internal class FusionEngineBinding(engine: FlutterEngine?) {
     fun detach() {
         hostPush?.setMessageHandler(null)
         hostPush = null
+        hostRequest?.setMessageHandler(null)
+        hostRequest = null
         hostDestroy?.setMessageHandler(null)
         hostDestroy = null
         hostRestore?.setMessageHandler(null)

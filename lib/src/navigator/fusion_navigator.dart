@@ -1,9 +1,29 @@
 import 'package:flutter/material.dart';
+import '../channel/fusion_channel.dart';
 import '../container/fusion_overlay.dart';
 import '../navigator/fusion_navigator_delegate.dart';
 
 class FusionNavigator {
   FusionNavigator._();
+
+  static void dispatchNative(
+    String routeName, {
+    Map<String, dynamic>? routeArgs,
+  }) {
+    FusionChannel.instance.dispatchNative(routeName, routeArgs);
+  }
+
+  static Future<T?> requestNative<T extends Object?>(
+    String routeName, {
+    required String requestId,
+    Map<String, dynamic>? routeArgs,
+  }) {
+    return FusionChannel.instance.requestNative<T>(
+      routeName,
+      routeArgs,
+      requestId,
+    );
+  }
 
   /// Push a new page.
   static Future<T?> push<T extends Object?>(

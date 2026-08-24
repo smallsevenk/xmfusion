@@ -60,6 +60,16 @@ interface FusionRouteDelegate {
     fun pushFlutterRoute(name: String, args: Map<String, Any>?)
 }
 
+/** Optional result-capable extension; existing fire-and-forget delegates remain compatible. */
+interface FusionResultRouteDelegate : FusionRouteDelegate {
+    fun pushNativeRouteForResult(
+        name: String,
+        args: Map<String, Any>?,
+        requestId: String,
+        completion: (Any?) -> Unit
+    )
+}
+
 enum class FusionRouteType {
     FLUTTER,
     FLUTTER_WITH_CONTAINER,

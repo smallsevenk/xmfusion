@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import UIKit
 
 private var gestureRecognizer = "gestureRecognizer"
 private var gestureRecognizerDelegate = "gestureRecognizerDelegate"
@@ -44,16 +45,27 @@ extension UINavigationController {
     }
 
     public func addPopGesture() {
-        if interactivePopGestureRecognizer?.view?.gestureRecognizers?.contains(popGestureRecognizer()) == false {
-            interactivePopGestureRecognizer?.view?.addGestureRecognizer(popGestureRecognizer())
+        // Use UIKit's own interactive transition. The previous implementation
+        // permanently disabled it and installed a private-selector clone, which
+        // could leave the rest of the navigation stack without swipe-back.
+        if let legacyGesture = objc_getAssociatedObject(
+            self,
+            &gestureRecognizer
+        ) as? UIScreenEdgePanGestureRecognizer,
+           interactivePopGestureRecognizer?.view?.gestureRecognizers?.contains(legacyGesture) == true {
+            interactivePopGestureRecognizer?.view?.removeGestureRecognizer(legacyGesture)
         }
-        interactivePopGestureRecognizer?.isEnabled = false
+        interactivePopGestureRecognizer?.isEnabled = true
     }
 
     public func removePopGesture() {
-        if interactivePopGestureRecognizer?.view?.gestureRecognizers?.contains(popGestureRecognizer()) == true {
-            interactivePopGestureRecognizer?.view?.removeGestureRecognizer(popGestureRecognizer())
+        if let legacyGesture = objc_getAssociatedObject(
+            self,
+            &gestureRecognizer
+        ) as? UIScreenEdgePanGestureRecognizer,
+           interactivePopGestureRecognizer?.view?.gestureRecognizers?.contains(legacyGesture) == true {
+            interactivePopGestureRecognizer?.view?.removeGestureRecognizer(legacyGesture)
         }
-        interactivePopGestureRecognizer?.isEnabled = true
+        interactivePopGestureRecognizer?.isEnabled = false
     }
 }

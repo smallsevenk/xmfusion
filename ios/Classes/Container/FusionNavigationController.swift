@@ -5,6 +5,8 @@
 //  Created by gtbluesky on 2024/7/24.
 //
 
+import UIKit
+
 public class FusionNavigationController : UINavigationController {
     // 当前界面是否开启自动转屏，如果返回false，后面两个方法也不会被调用，只支持默认方向
     public override var shouldAutorotate: Bool {
