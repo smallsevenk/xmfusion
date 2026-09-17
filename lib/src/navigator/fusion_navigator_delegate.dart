@@ -201,19 +201,24 @@ class FusionNavigatorDelegate {
 
   Future<bool> maybePop<T extends Object?>([T? result]) async {
     final route = FusionOverlayManager.instance.topRoute;
-    RoutePopDisposition? disposition = await route?.willPop();
-    switch (disposition) {
-      case RoutePopDisposition.bubble:
-        pop<T>(result);
-        return false;
-      case RoutePopDisposition.pop:
-        pop<T>(result);
-        return true;
-      case RoutePopDisposition.doNotPop:
-        return true;
-      default:
-        return false;
+    final navigator = route?.navigator;
+    if (route == null || navigator == null) {
+      return false;
     }
+
+    // Delegate the native back request to the Navigator that owns the actual
+    // Flutter route. NavigatorState.maybePop handles both WillPopScope and
+    // PopScope (including canPop/onPopInvokedWithResult) using Flutter's
+    // standard behavior.
+    final handled = await navigator.maybePop<T>(result);
+    if (handled) {
+      return true;
+    }
+
+    // A bubble result means the inner Navigator has no route left to pop.
+    // Preserve Fusion's container behavior by closing the native container.
+    await pop<T>(result);
+    return false;
   }
 
   Future<void> popUntil(String routeName) async {
