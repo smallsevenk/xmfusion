@@ -1,0 +1,20 @@
+name: hybrid_module_template
+description: Business-free Flutter module template for the Fusion runtime.
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  fusion:
+    path: ../fusion-core
+
+flutter:
+  uses-material-design: true
+  module:
+    androidX: true
+    androidPackage: com.example.hybrid.module
+    iosBundleIdentifier: com.example.hybrid.module

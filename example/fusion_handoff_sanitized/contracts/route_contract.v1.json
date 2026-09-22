@@ -1,0 +1,77 @@
+{
+  "registryFormatVersion": 1,
+  "contractVersion": "1.0.0",
+  "compatibilityPolicy": {
+    "sameMajorAllows": ["addOptionalField"],
+    "majorUpgradeRequiredFor": [
+      "removeRouteOrEvent",
+      "renameRouteEventOrField",
+      "removeField",
+      "addRequiredField",
+      "changeFieldType",
+      "changeDirection",
+      "changeResultMode"
+    ]
+  },
+  "routes": [
+    {
+      "symbol": "featureHome",
+      "name": "/feature/home",
+      "direction": "nativeToFlutter",
+      "arguments": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entryId"],
+        "properties": {
+          "entryId": {"type": "string", "minLength": 1},
+          "title": {"type": "string", "nullable": true}
+        }
+      },
+      "result": {"mode": "none", "schema": {"type": "null"}}
+    },
+    {
+      "symbol": "openNativeScreen",
+      "name": "openNativeScreen",
+      "direction": "flutterToNative",
+      "arguments": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["screenId"],
+        "properties": {"screenId": {"type": "string", "minLength": 1}}
+      },
+      "result": {"mode": "none", "schema": {"type": "null"}}
+    },
+    {
+      "symbol": "pickNativeValue",
+      "name": "pickNativeValue",
+      "direction": "flutterToNative",
+      "arguments": {
+        "type": "object",
+        "nullable": true,
+        "additionalProperties": false,
+        "properties": {"initialValue": {"type": "string", "nullable": true}}
+      },
+      "result": {
+        "mode": "nullableValue",
+        "schema": {"type": "serializableValue", "nullable": true}
+      }
+    }
+  ],
+  "events": [
+    {
+      "symbol": "entityChanged",
+      "name": "entityChanged",
+      "direction": "nativeToFlutter",
+      "payload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entityId", "revision", "changedAt"],
+        "properties": {
+          "entityId": {"type": "string", "minLength": 1},
+          "revision": {"type": "integer", "minimum": 1},
+          "changedAt": {"type": "integer", "minimum": 0}
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+name: fusion
+description: Generic single-engine, multi-container Flutter hybrid stack runtime.
+version: 4.10.3
+publish_to: none
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.7.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: 1.0.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.gtbluesky.fusion
+        pluginClass: FusionPlugin
+      ios:
+        pluginClass: FusionPlugin
+
+topics:
+  - hybrid
